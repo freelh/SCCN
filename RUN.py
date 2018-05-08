@@ -10,6 +10,7 @@
 import wx
 import wx.xrc
 import sccn_test_app
+import threading
 
 ###########################################################################
 ## Class zongti
@@ -177,6 +178,8 @@ class zongti(wx.Frame):
         event.Skip()
 
     def start(self, event):
+	    if threading.activate_count>1:
+		    pass
         self.info.Clear()
         opt_path = self.OPT_F.GetPath()
         sar_path = self.SAR_F.GetPath()
@@ -199,7 +202,11 @@ class zongti(wx.Frame):
         self.info.AppendText('\n   times: ' + str(t_times))
         self.info.AppendText('\n   step:' + str(t_step))
         self.info.AppendText('\n-----------' )
-        sccn_test_app.SCCN(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step,self.info)
+        def work(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step,info):
+            sccn_test_app.SCCN(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step,info)
+
+        thread = threading.Thread(target=work,args=(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step,info))
+        thread.start()
         event.Skip()
 
 
