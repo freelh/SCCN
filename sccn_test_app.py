@@ -11,7 +11,7 @@ def SCCN(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step
     img_opt = (img_opt.astype(np.float32)/255).reshape([1,shape[0],shape[1],1])
     img_sar = (cv2.imread(sar_path,0).astype(np.float32)/255).reshape([1,shape[0],shape[1],1])
 
-    k=100000000#60000
+    k=10000#60000
     map = np.array(np.random.rand(shape[0],shape[1]),dtype=np.float32)
     global map
     global phi
@@ -23,7 +23,7 @@ def SCCN(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step
     start_time = time.localtime()
     TEXT.AppendText(now+':start pretrain\n')
 
-    #--------------------------------------初始化---------------------------------------------#
+    #--------------------------------------鍒濆鍖�---------------------------------------------#
     a=DAEk.DAE(TEXT)
     now = time.strftime("\n%d-%H:%M:%S  ", time.localtime())
     TEXT.AppendText(now + ':pretrain : 1st opt_layer\n')
@@ -63,7 +63,7 @@ def SCCN(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step
 
 
 
-    #---------------------------------搭建网络-----------------------------------#
+    #---------------------------------鎼缓缃戠粶-----------------------------------#
     opt1w = tf.Variable(opt_1_w)
     opt1b = tf.Variable(opt_1_b)
     opt1h = tf.nn.sigmoid(tf.nn.conv2d(img_opt , opt1w ,strides=[1,1,1,1],padding='SAME')+opt1b)
@@ -98,8 +98,9 @@ def SCCN(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step
     now = time.strftime("\n%d-%H:%M:%S  ", time.localtime())
     TEXT.AppendText(now + ':pretrain :over\n')
     print(map_temp)
-    map_temp = map_temp/(np.max(map_temp))
+    #nor
     map_temp = map_temp.reshape(shape)
+    map = map_temp
     # map = 1-map_temp
     # cv2.imshow('0',map_temp)
     # cv2.waitKey(-1)
@@ -114,11 +115,11 @@ def SCCN(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step
     sar4b = tf.Variable(sar_4_b)
 
     opt4h=tf.sigmoid(tf.nn.conv2d(opt3h , opt4w ,strides=[1,1,1,1],padding='SAME')+opt4b)
-    sar4h=tf.sigmoid(tf.nn.conv2d(sar3h , sar4w ,strides=[1,1,1,1],padding='SAME')+opt3b)
+    sar4h=tf.sigmoid(tf.nn.conv2d(sar3h , sar4w ,strides=[1,1,1,1],padding='SAME')+sar4b)
 
 
 
-    #计算
+    #璁＄畻
     sub = tf.sqrt(tf.reduce_mean(tf.square(opt4h-sar4h),3))#run
     sub = tf.reshape(sub,shape)
     def cal(a):
@@ -129,18 +130,20 @@ def SCCN(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step
 
 
 
-    #loss = tf.reduce_mean(sub * map)  - phi*tf.reduce_mean(map)
+    #loss = tf.reduce_mean(sub * map) - phi*tf.reduce_mean(map)
     map_p = tf.placeholder(tf.float32)
     loss = tf.reduce_mean(sub * map_p) - phi * tf.reduce_mean(map_p)
+    print('------------')
+    print(phi)
     step = t_step
-    decay_rate = 0.96  # 衰减率
-    global_steps = t_times # 总的迭代次数
-    decay_steps = 100  # 衰减次数
+    decay_rate = 0.96  # 琛板噺鐜�
+    global_steps = t_times # 鎬荤殑杩唬娆℃暟
+    decay_steps = 100  # 琛板噺娆℃暟
     global_ = tf.Variable(tf.constant(0))
     learning_rate = tf.train.exponential_decay(step,global_,decay_steps=global_steps,decay_rate=decay_rate,staircase=False)
 
 
-    opt = tf.train.AdamOptimizer(learning_rate).minimize(loss,global_step = global_)
+    opt = tf.train.AdamOptimizer(learning_rate).minimize(loss)#,global_step = global_)
     now = time.strftime("\n%d-%H:%M:%S  ", time.localtime())
     TEXT.AppendText(now + ':train\n')
     with tf.Session() as sess:
@@ -154,7 +157,7 @@ def SCCN(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step
         temp = 0
         TEXT.AppendText('=')
         for j in range(global_steps):
-            cal_map(sess.run(sub)/max(max(sess.run(sub))))
+            cal_map(sess.run(sub))
             sess.run(opt,feed_dict={map_p:map})
 
             if(j*10//global_steps == temp):
@@ -165,12 +168,9 @@ def SCCN(opt_path,sar_path,save_path,noise_std,p_times,p_step,lam,t_times,t_step
 
             phi = phi / 1
             # k = k*1.005
-            map_n = map / (np.max(map))
-            if j is 15:
-                print(map)
-                print(map_n)
-                print(sess.run(sub))
+            map_n = map
             cv2.imwrite(save_path+'/res'+str(j)+'.tif',(((1-map_n))*255).astype(np.uint8))
+
         print(save_path + '\\' + str(10) + 'opt.tif')
         for i in range(20):
             cv2.imwrite(save_path + '/after_'+str(i)  +'_opt.tif', ((sess.run(tf.reshape(opt4h[:,:,:,i],shape))) * 255).astype(np.uint8))
